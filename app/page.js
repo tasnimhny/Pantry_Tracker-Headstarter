@@ -229,7 +229,7 @@
 
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { Box, Stack, Typography, Button, Modal, TextField } from '@mui/material'
 import { firestore, storage } from '@/firebase' // Import firestore and storage
 import {
@@ -243,6 +243,7 @@ import {
 } from 'firebase/firestore'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import Image from 'next/image'
+import { Camera } from 'react-camera-pro'
 
 const style = {
   position: 'absolute',
@@ -297,10 +298,10 @@ export default function Home() {
   const [inventory, setInventory] = useState([])
   const [open, setOpen] = useState(false)
   const [itemName, setItemName] = useState('')
-  const [imageFile, setImageFile] = useState(null)
-  const [imagePreview, setImagePreview] = useState(null)
+  const [imageData, setImageData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [showInventory, setShowInventory] = useState(false)
+  const cameraRef = useRef(null)
 
   const updateInventory = useCallback(async () => {
     setLoading(true)
@@ -320,14 +321,19 @@ export default function Home() {
     }
   }, [showInventory, updateInventory])
 
-  const handleAddItem = async (item, imageFile) => {
+  const handleAddItem = async (item, imageData) => {
     try {
       let imageUrl = ''
 
-      if (imageFile) {
+      if (imageData) {
+        // Convert base64 image to blob
+        const response = await fetch(imageData)
+        const blob = await response.blob()
+
         // Upload image to Firebase Storage
-        const storageRef = ref(storage, `images/${imageFile.name}`)
-        await uploadBytes(storageRef, imageFile)
+        const imageName = `${item}-${Date.now()}.jpg`
+        const storageRef = ref(storage, `images/${imageName}`)
+        await uploadBytes(storageRef, blob)
         imageUrl = await getDownloadURL(storageRef)
       }
 
@@ -351,13 +357,12 @@ export default function Home() {
   const handleOpen = () => setOpen(true)
   const handleClose = () => {
     setOpen(false)
-    setImagePreview(null)
+    setImageData(null)
   }
 
-  const handleImageChange = (e) => {
-    const file = e.target.files[0]
-    setImageFile(file)
-    setImagePreview(URL.createObjectURL(file))
+  const handleCapture = () => {
+    const photo = cameraRef.current.takePhoto()
+    setImageData(photo)
   }
 
   return (
@@ -382,7 +387,7 @@ export default function Home() {
               <Typography id="modal-modal-title" variant="h6" component="h2">
                 Add Item
               </Typography>
-              <Stack width="100%" direction={'row'} spacing={2}>
+              <Stack width="100%" direction={'column'} spacing={2}>
                 <TextField
                   id="outlined-basic"
                   label="Item"
@@ -391,28 +396,20 @@ export default function Home() {
                   value={itemName}
                   onChange={(e) => setItemName(e.target.value)}
                 />
-                <input
-                  type="file"
-                  onChange={handleImageChange}
-                />
+                <Camera ref={cameraRef} />
+                <Button onClick={handleCapture}>Capture Photo</Button>
                 <Button
                   variant="outlined"
                   onClick={() => {
-                    handleAddItem(itemName, imageFile)
+                    handleAddItem(itemName, imageData)
                     setItemName('')
-                    setImageFile(null)
-                    setImagePreview(null)
+                    setImageData(null)
                     handleClose()
                   }}
                 >
                   Add
                 </Button>
               </Stack>
-              {imagePreview && (
-                <Box mt={2} display="flex" justifyContent="center">
-                  <img src={imagePreview} alt="Preview" style={{ maxWidth: '100%', maxHeight: '200px' }} />
-                </Box>
-              )}
             </Box>
           </Modal>
           <Button variant="contained" onClick={handleOpen}>
